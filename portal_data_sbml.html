@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal Data SBML</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif']
+                    },
+                    colors: {
+                        brand: {
+                            blue: '#1E3A8A',
+                            gold: '#D97706'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; height: 100vh; display: flex; flex-direction: column; background-color: #f8fafc; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .glass { background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .table-container { flex: 1; overflow-y: auto; position: relative; }
+        th { position: sticky; top: 0; z-index: 10; background-color: #f8fafc; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+    </style>
+</head>
+<body class="text-slate-800 antialiased">
+
+    <!-- LOGIN SCREEN -->
+    <div id="loginView" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900 bg-[url('https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=2000&auto=format&fit=crop')] bg-cover bg-center">
+        <div class="absolute inset-0 bg-brand-blue/80 backdrop-blur-sm"></div>
+        <div class="relative glass p-10 rounded-2xl shadow-2xl w-full max-w-sm border-t-4 border-brand-gold">
+            <div class="text-center mb-8">
+                <i class="fa-solid fa-file-signature text-4xl text-brand-gold mb-3"></i>
+                <h1 class="text-2xl font-bold text-slate-900">Portal SBML</h1>
+                <p class="text-sm text-slate-600 mt-1">Sistem Data Terpadu</p>
+            </div>
+            
+            <form id="formLogin" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Username</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-user absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="username" required class="w-full pl-10 pr-3 py-2 bg-white/70 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:outline-none" placeholder="Username">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
+                    <div class="relative">
+                        <i class="fa-solid fa-lock absolute left-3 top-3 text-slate-400"></i>
+                        <input type="password" id="password" required class="w-full pl-10 pr-3 py-2 bg-white/70 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:outline-none" placeholder="Password">
+                    </div>
+                </div>
+                <div id="loginErrorMsg" class="hidden text-xs text-rose-600 bg-rose-50 p-2 rounded border border-rose-200 text-center font-medium">Kredensial tidak valid.</div>
+                <button type="submit" class="w-full py-2.5 bg-brand-blue hover:bg-blue-800 text-white font-semibold rounded-lg shadow transition mt-2">
+                    Masuk
+                </button>
+            </form>
+            <div class="mt-6 text-[10px] text-slate-500 text-center font-mono">
+                Admin: SB/SBSB | Operator: andri/andri1
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD -->
+    <div id="mainDashboard" class="hidden flex-col h-full">
+        <!-- Header -->
+        <header class="bg-white border-b border-slate-200 shadow-sm shrink-0 px-6 py-3 flex justify-between items-center z-40">
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-blue text-brand-gold p-2 rounded-lg"><i class="fa-solid fa-file-signature text-xl"></i></div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-tight">Portal Data SBML</h1>
+                    <div class="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                        <i id="cloudStatusIcon" class="fa-solid fa-cloud text-slate-400"></i>
+                        <span id="cloudStatusText">Menghubungkan...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden sm:block">
+                    <p id="activeUserName" class="text-sm font-bold text-slate-800">Nama User</p>
+                    <p id="activeUserRole" class="text-[10px] uppercase font-bold text-brand-gold">Role</p>
+                </div>
+                <button onclick="handleLogout()" class="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 transition" title="Keluar">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </button>
+            </div>
+        </header>
+
+        <main class="flex-1 p-6 flex flex-col gap-6 overflow-hidden min-h-0 max-w-[1600px] mx-auto w-full">
+            <!-- Stats Row -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-4 border-l-4 border-l-slate-400">
+                    <div class="p-3 bg-slate-50 rounded-lg text-slate-500"><i class="fa-solid fa-layer-group text-xl"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Total Data</p>
+                        <h3 id="statTotal" class="text-2xl font-black text-slate-800">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-4 border-l-4 border-l-emerald-500">
+                    <div class="p-3 bg-emerald-50 rounded-lg text-emerald-600"><i class="fa-solid fa-check-double text-xl"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Disetujui/Selesai</p>
+                        <h3 id="statSetuju" class="text-2xl font-black text-emerald-600">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-4 border-l-4 border-l-amber-500">
+                    <div class="p-3 bg-amber-50 rounded-lg text-amber-500"><i class="fa-solid fa-hourglass-half text-xl"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Dalam Proses</p>
+                        <h3 id="statProses" class="text-2xl font-black text-amber-500">0</h3>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center gap-4 border-l-4 border-l-rose-500">
+                    <div class="p-3 bg-rose-50 rounded-lg text-rose-500"><i class="fa-solid fa-ban text-xl"></i></div>
+                    <div>
+                        <p class="text-xs font-bold text-slate-500 uppercase">Ditolak/Batal</p>
+                        <h3 id="statTolak" class="text-2xl font-black text-rose-600">0</h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADMIN VIEW -->
+            <div id="viewAdmin" class="hidden flex-1 overflow-y-auto">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 mb-4 border-b pb-2"><i class="fa-solid fa-chart-pie mr-2 text-brand-blue"></i>Rekap Status</h3>
+                        <div id="chartStatus" class="space-y-4"></div>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 mb-4 border-b pb-2"><i class="fa-solid fa-code-compare mr-2 text-brand-blue"></i>Jenis SBML</h3>
+                        <div id="chartJenis" class="flex justify-around items-center h-32"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                    <h3 class="font-bold text-slate-800 mb-4 border-b pb-2"><i class="fa-solid fa-building mr-2 text-brand-blue"></i>Top 5 Kementerian/Lembaga</h3>
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-slate-500 bg-slate-50 uppercase">
+                            <tr>
+                                <th class="py-2 px-3 rounded-l-lg">Nama K/L</th>
+                                <th class="py-2 px-3 text-center">Total</th>
+                                <th class="py-2 px-3 text-center text-emerald-600">Setuju</th>
+                                <th class="py-2 px-3 text-center text-amber-500 rounded-r-lg">Proses</th>
+                            </tr>
+                        </thead>
+                        <tbody id="topKlBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- OPERATOR VIEW -->
+            <div id="viewOperator" class="hidden flex-col gap-4 flex-1 min-h-0">
+                <!-- Toolbar -->
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-3 items-center shrink-0">
+                    <div class="relative flex-1 min-w-[200px]">
+                        <i class="fa-solid fa-search absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                        <input type="text" id="filterSearch" placeholder="Cari KL, Perihal, No Surat..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-blue focus:outline-none">
+                    </div>
+                    <select id="filterTahun" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="">Semua Tahun</option>
+                        <option value="2027">2027</option><option value="2026">2026</option><option value="2025">2025</option>
+                    </select>
+                    <select id="filterStatus" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="">Semua Status</option>
+                        <option value="Selesai">Selesai / Setuju</option>
+                        <option value="Proses">Dalam Proses</option>
+                        <option value="Kembali">Dikembalikan / Tolak</option>
+                    </select>
+                    <select id="filterKar" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="">Karakteristik</option>
+                        <option value="1 K/L">1 K/L</option><option value="Beberapa K/L">Beberapa K/L</option><option value="Semua K/L">Semua K/L</option>
+                    </select>
+                    <select id="filterJenis" class="py-2 px-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-blue">
+                        <option value="">Jenis SBML</option>
+                        <option value="1. SBML Baru">Baru</option><option value="2. SBML Lama (update)">Lama (Update)</option>
+                    </select>
+                    <button id="btnResetFilter" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg border border-slate-200 transition" title="Reset Filter"><i class="fa-solid fa-rotate-right"></i></button>
+                    
+                    <div class="flex gap-2 ml-auto">
+                        <button onclick="openImportModal()" class="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-medium rounded-lg text-sm transition flex items-center gap-2">
+                            <i class="fa-solid fa-file-csv"></i> Import CSV
+                        </button>
+                        <button onclick="openFormModal()" class="px-4 py-2 bg-brand-blue text-white hover:bg-blue-800 font-medium rounded-lg text-sm transition shadow flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> Tambah Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Table -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                    <div class="table-container flex-1 bg-white">
+                        <table class="w-full text-left text-sm whitespace-nowrap">
+                            <thead class="text-xs uppercase text-slate-500 font-semibold tracking-wider bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th class="py-3 px-4 w-12 text-center">No</th>
+                                    <th class="py-3 px-4">Kementerian/Lembaga</th>
+                                    <th class="py-3 px-4 w-20 text-center">Tahun</th>
+                                    <th class="py-3 px-4">Surat Pemohon</th>
+                                    <th class="py-3 px-4">Perihal</th>
+                                    <th class="py-3 px-4">Karakteristik & Jenis</th>
+                                    <th class="py-3 px-4 text-center w-32">Status</th>
+                                    <th class="py-3 px-4 text-center w-24">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                        <div id="emptyTableState" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-white/90">
+                            <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-2"></i>
+                            <p class="text-slate-500 font-medium">Tidak ada data ditemukan</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL FORM CRUD -->
+    <div id="modalForm" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="bg-brand-blue px-6 py-4 flex justify-between items-center text-white shrink-0">
+                <h3 class="font-bold text-lg" id="modalFormTitle">Form Data SBML</h3>
+                <button onclick="closeFormModal()" class="text-blue-200 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1">
+                <form id="crudForm" class="space-y-4">
+                    <input type="hidden" id="formId">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="md:col-span-2">
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Kementerian/Lembaga *</label>
+                            <input type="text" id="f_nama" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Tahun *</label>
+                            <input type="number" id="f_tahun" required value="2026" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Perihal *</label>
+                        <textarea id="f_perihal" required rows="2" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue"></textarea>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">No Surat Permohonan</label>
+                            <input type="text" id="f_nosurat" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Tanggal Surat</label>
+                            <input type="date" id="f_tglsurat" class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Karakteristik *</label>
+                            <select id="f_kar" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                                <option value="1 K/L">1 K/L</option><option value="Beberapa K/L">Beberapa K/L</option><option value="Semua K/L">Semua K/L</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Jenis SBML *</label>
+                            <select id="f_jenis" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                                <option value="1. SBML Baru">1. SBML Baru</option><option value="2. SBML Lama (update)">2. SBML Lama</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Status *</label>
+                            <select id="f_status" required class="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-brand-blue">
+                                <option value="Dalam Proses">Dalam Proses</option><option value="Disetujui">Disetujui / Selesai</option><option value="Dikembalikan">Dikembalikan / Tolak</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3 shrink-0">
+                <button onclick="closeFormModal()" class="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition">Batal</button>
+                <button onclick="saveData()" id="btnSaveData" class="px-5 py-2 text-sm font-medium text-white bg-brand-blue hover:bg-blue-800 rounded-lg transition shadow flex items-center gap-2">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Simpan ke Cloud
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL IMPORT -->
+    <div id="modalImport" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="bg-emerald-600 px-5 py-3 flex justify-between items-center text-white">
+                <h3 class="font-bold">Import CSV/Excel</h3>
+                <button onclick="closeImportModal()" class="text-emerald-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-6 text-center space-y-4">
+                <input type="file" id="fileUpload" accept=".csv, .xlsx, .xls" class="hidden" onchange="handleFileUpload(event)">
+                <div onclick="document.getElementById('fileUpload').click()" class="border-2 border-dashed border-emerald-300 bg-emerald-50 rounded-xl p-8 cursor-pointer hover:bg-emerald-100 transition">
+                    <i class="fa-solid fa-file-excel text-4xl text-emerald-500 mb-2"></i>
+                    <p class="font-bold text-emerald-800 text-sm">Klik untuk memilih file</p>
+                    <p class="text-xs text-emerald-600 mt-1">.csv atau .xlsx didukung</p>
+                </div>
+                <div id="importStatus" class="hidden text-sm font-medium text-slate-600 py-2"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Memproses & Mengunggah...</div>
+                <div class="text-left bg-slate-50 p-3 rounded text-xs text-slate-600 border border-slate-200">
+                    <strong>Format Kolom Header Wajib:</strong><br>
+                    <span class="font-mono mt-1 block">nama, tahun, nosurat, tglsurat, perihal, karakteristik, jenis, status</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOM TOAST & CONFIRM -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2"></div>
+    
+    <div id="modalConfirm" class="fixed inset-0 z-[60] hidden bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
+            <div class="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <h3 class="font-bold text-lg text-slate-800 mb-2">Hapus Data?</h3>
+            <p class="text-sm text-slate-500 mb-6">Tindakan ini akan menghapus data secara permanen dari Cloud Database.</p>
+            <div class="flex gap-3">
+                <button onclick="closeConfirm()" class="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition">Batal</button>
+                <button id="btnConfirmAction" class="flex-1 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-medium transition shadow-lg shadow-rose-200">Ya, Hapus</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // APP STATE
+        let activeUser = null;
+        let globalData = [];
+        let db, auth, dataListener;
+        let isOnline = false;
+
+        // PLACE YOUR FIREBASE CONFIG HERE to make it live globally
+        // For this demo structure, if config is empty, we simulate offline mode.
+        const firebaseConfig = {
+            // apiKey: "YOUR_API_KEY",
+            // authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            // projectId: "YOUR_PROJECT_ID",
+            // storageBucket: "YOUR_PROJECT_ID.firebasestorage.app",
+            // messagingSenderId: "YOUR_SENDER_ID",
+            // appId: "YOUR_APP_ID"
+        };
+
+        // UI HELPERS (No alert/confirm)
+        function showToast(title, msg, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const icon = type === 'success' ? '<i class="fa-solid fa-circle-check text-emerald-500 text-xl"></i>' : '<i class="fa-solid fa-circle-xmark text-rose-500 text-xl"></i>';
+            toast.className = `bg-white border-l-4 ${type === 'success' ? 'border-emerald-500' : 'border-rose-500'} shadow-lg rounded p-4 flex gap-3 items-center transform transition-all translate-y-10 opacity-0 duration-300`;
+            toast.innerHTML = `${icon}<div><h4 class="font-bold text-sm text-slate-800">${title}</h4><p class="text-xs text-slate-500">${msg}</p></div>`;
+            container.appendChild(toast);
+            
+            setTimeout(() => { toast.classList.remove('translate-y-10', 'opacity-0'); }, 10);
+            setTimeout(() => { 
+                toast.classList.add('opacity-0', 'translate-x-10'); 
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        let confirmCallback = null;
+        window.openConfirm = (callback) => {
+            confirmCallback = callback;
+            document.getElementById('modalConfirm').classList.remove('hidden');
+        };
+        window.closeConfirm = () => {
+            confirmCallback = null;
+            document.getElementById('modalConfirm').classList.add('hidden');
+        };
+        document.getElementById('btnConfirmAction').addEventListener('click', () => {
+            if(confirmCallback) confirmCallback();
+            window.closeConfirm();
+        });
+
+        // INIT FIREBASE
+        async function initApp() {
+            const statusIcon = document.getElementById('cloudStatusIcon');
+            const statusText = document.getElementById('cloudStatusText');
+            
+            if (Object.keys(firebaseConfig).length === 0) {
+                isOnline = false;
+                statusIcon.className = 'fa-solid fa-cloud-slash text-amber-500';
+                statusText.innerText = 'Mode Offline (Lokal)';
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                await signInAnonymously(auth);
+                
+                isOnline = true;
+                statusIcon.className = 'fa-solid fa-cloud text-emerald-500 fa-fade';
+                statusText.innerText = 'Tersinkronisasi';
+
+                const collRef = collection(db, "sbml_data");
+                dataListener = onSnapshot(collRef, (snapshot) => {
+                    globalData = [];
+                    snapshot.forEach((doc) => {
+                        globalData.push({ id: doc.id, ...doc.data() });
+                    });
+                    // Sort descending by timestamp if exists
+                    globalData.sort((a,b) => (b.timestamp || 0) - (a.timestamp || 0));
+                    refreshUI();
+                });
+            } catch (error) {
+                console.error("Firebase Error:", error);
+                statusIcon.className = 'fa-solid fa-triangle-exclamation text-rose-500';
+                statusText.innerText = 'Koneksi Cloud Gagal';
+            }
+        }
+
+        // AUTH LOGIC
+        window.handleLogin = (e) => {
+            e.preventDefault();
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const err = document.getElementById('loginErrorMsg');
+
+            if (u === 'SB' && p === 'SBSB') activeUser = { role: 'admin', name: 'Administrator' };
+            else if (u === 'andri' && p === 'andri1') activeUser = { role: 'operator', name: 'Andri (Operator)' };
+            
+            if (activeUser) {
+                document.getElementById('loginView').classList.add('hidden');
+                document.getElementById('mainDashboard').classList.remove('hidden');
+                document.getElementById('mainDashboard').classList.add('flex');
+                document.getElementById('activeUserName').innerText = activeUser.name;
+                document.getElementById('activeUserRole').innerText = activeUser.role;
+                
+                refreshUI();
+            } else {
+                err.classList.remove('hidden');
+            }
+        };
+
+        window.handleLogout = () => {
+            activeUser = null;
+            document.getElementById('mainDashboard').classList.add('hidden');
+            document.getElementById('mainDashboard').classList.remove('flex');
+            document.getElementById('loginView').classList.remove('hidden');
+            document.getElementById('formLogin').reset();
+            document.getElementById('loginErrorMsg').classList.add('hidden');
+        };
+
+        // UI RENDERING
+        function refreshUI() {
+            if(!activeUser) return;
+            updateStats();
+            if (activeUser.role === 'admin') {
+                document.getElementById('viewAdmin').classList.remove('hidden');
+                document.getElementById('viewOperator').classList.add('hidden');
+                renderAdminDashboard();
+            } else {
+                document.getElementById('viewAdmin').classList.add('hidden');
+                document.getElementById('viewOperator').classList.remove('hidden');
+                document.getElementById('viewOperator').classList.add('flex');
+                renderOperatorTable();
+            }
+        }
+
+        function updateStats() {
+            let setuju = 0, proses = 0, tolak = 0;
+            globalData.forEach(d => {
+                const s = (d.status || '').toLowerCase();
+                if(s.includes('selesai') || s.includes('setuju')) setuju++;
+                else if(s.includes('kembali') || s.includes('tolak')) tolak++;
+                else proses++;
+            });
+            document.getElementById('statTotal').innerText = globalData.length;
+            document.getElementById('statSetuju').innerText = setuju;
+            document.getElementById('statProses').innerText = proses;
+            document.getElementById('statTolak').innerText = tolak;
+        }
+
+        function renderAdminDashboard() {
+            // Stats chart sim
+            const total = globalData.length || 1;
+            let s=0, p=0, t=0, baru=0, lama=0;
+            const klMap = {};
+
+            globalData.forEach(d => {
+                const stat = (d.status || '').toLowerCase();
+                if(stat.includes('setuju') || stat.includes('selesai')) s++;
+                else if(stat.includes('tolak') || stat.includes('kembali')) t++;
+                else p++;
+
+                if((d.jenis || '').includes('Baru')) baru++; else lama++;
+
+                const kl = d.nama || 'Tidak Diketahui';
+                if(!klMap[kl]) klMap[kl] = {t:0, s:0, p:0};
+                klMap[kl].t++;
+                if(stat.includes('setuju') || stat.includes('selesai')) klMap[kl].s++;
+                else if(!stat.includes('tolak') && !stat.includes('kembali')) klMap[kl].p++;
+            });
+
+            // Status Bars
+            document.getElementById('chartStatus').innerHTML = `
+                <div><div class="flex justify-between text-xs mb-1 text-slate-600 font-medium"><span>Disetujui / Selesai</span><span>${s}</span></div><div class="w-full bg-slate-100 rounded-full h-2"><div class="bg-emerald-500 h-2 rounded-full" style="width: ${(s/total)*100}%"></div></div></div>
+                <div><div class="flex justify-between text-xs mb-1 text-slate-600 font-medium"><span>Dalam Proses</span><span>${p}</span></div><div class="w-full bg-slate-100 rounded-full h-2"><div class="bg-amber-500 h-2 rounded-full" style="width: ${(p/total)*100}%"></div></div></div>
+                <div><div class="flex justify-between text-xs mb-1 text-slate-600 font-medium"><span>Dikembalikan / Tolak</span><span>${t}</span></div><div class="w-full bg-slate-100 rounded-full h-2"><div class="bg-rose-500 h-2 rounded-full" style="width: ${(t/total)*100}%"></div></div></div>
+            `;
+
+            // Jenis Chart
+            document.getElementById('chartJenis').innerHTML = `
+                <div class="text-center"><div class="w-16 h-16 rounded-full border-4 border-brand-blue flex items-center justify-center text-xl font-bold text-slate-700 mx-auto mb-2">${baru}</div><span class="text-xs text-slate-500 font-medium">SBML Baru</span></div>
+                <div class="text-center"><div class="w-16 h-16 rounded-full border-4 border-slate-300 flex items-center justify-center text-xl font-bold text-slate-700 mx-auto mb-2">${lama}</div><span class="text-xs text-slate-500 font-medium">SBML Lama</span></div>
+            `;
+
+            // Top KL
+            const klArr = Object.keys(klMap).map(k => ({n: k, ...klMap[k]})).sort((a,b)=>b.t - a.t).slice(0,5);
+            let html = '';
+            klArr.forEach(k => {
+                html += `<tr class="hover:bg-slate-50 border-b border-slate-50"><td class="py-2 px-3 font-medium text-slate-700 truncate max-w-[200px]" title="${k.n}">${k.n}</td><td class="py-2 px-3 text-center font-bold text-slate-800">${k.t}</td><td class="py-2 px-3 text-center text-emerald-600">${k.s}</td><td class="py-2 px-3 text-center text-amber-500">${k.p}</td></tr>`;
+            });
+            document.getElementById('topKlBody').innerHTML = html || '<tr><td colspan="4" class="text-center py-4 text-slate-400">Data tidak tersedia</td></tr>';
+        }
+
+        // OPERATOR TABLE & FILTERS
+        const filters = ['filterSearch', 'filterTahun', 'filterStatus', 'filterKar', 'filterJenis'];
+        filters.forEach(id => document.getElementById(id).addEventListener('input', renderOperatorTable));
+        
+        document.getElementById('btnResetFilter').addEventListener('click', () => {
+            filters.forEach(id => document.getElementById(id).value = '');
+            renderOperatorTable();
+        });
+
+        function renderOperatorTable() {
+            if(activeUser?.role !== 'operator') return;
+
+            const s = document.getElementById('filterSearch').value.toLowerCase();
+            const th = document.getElementById('filterTahun').value;
+            const st = document.getElementById('filterStatus').value.toLowerCase();
+            const kr = document.getElementById('filterKar').value;
+            const jn = document.getElementById('filterJenis').value;
+
+            const filtered = globalData.filter(d => {
+                const matchS = `${d.nama} ${d.perihal} ${d.nosurat}`.toLowerCase().includes(s);
+                const matchTh = !th || String(d.tahun) === th;
+                const matchKr = !kr || d.karakteristik === kr;
+                const matchJn = !jn || d.jenis === jn;
+                
+                let matchSt = true;
+                const dbStat = (d.status || '').toLowerCase();
+                if(st === 'selesai') matchSt = dbStat.includes('selesai') || dbStat.includes('setuju');
+                else if(st === 'kembali') matchSt = dbStat.includes('kembali') || dbStat.includes('tolak');
+                else if(st === 'proses') matchSt = !dbStat.includes('selesai') && !dbStat.includes('setuju') && !dbStat.includes('kembali') && !dbStat.includes('tolak');
+
+                return matchS && matchTh && matchKr && matchJn && matchSt;
+            });
+
+            const tbody = document.getElementById('dataTableBody');
+            tbody.innerHTML = '';
+            
+            if(filtered.length === 0) {
+                document.getElementById('emptyTableState').classList.remove('hidden');
+            } else {
+                document.getElementById('emptyTableState').classList.add('hidden');
+                filtered.forEach((d, i) => {
+                    let badge = '<span class="bg-amber-100 text-amber-700 border border-amber-200 px-2 py-1 rounded text-[10px] font-bold uppercase">DALAM PROSES</span>';
+                    const stat = (d.status||'').toLowerCase();
+                    if(stat.includes('selesai') || stat.includes('setuju')) badge = '<span class="bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-1 rounded text-[10px] font-bold uppercase">SELESAI</span>';
+                    if(stat.includes('kembali') || stat.includes('tolak')) badge = '<span class="bg-rose-100 text-rose-700 border border-rose-200 px-2 py-1 rounded text-[10px] font-bold uppercase">DIKEMBALIKAN</span>';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition">
+                            <td class="py-3 px-4 text-center text-slate-400 font-medium">${i+1}</td>
+                            <td class="py-3 px-4 font-bold text-brand-blue whitespace-normal min-w-[200px]">${d.nama}</td>
+                            <td class="py-3 px-4 text-center text-slate-600 font-medium">${d.tahun || '-'}</td>
+                            <td class="py-3 px-4">
+                                <div class="text-xs font-mono bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded inline-block mb-1 text-slate-600">${d.nosurat || '-'}</div>
+                                <div class="text-[10px] text-slate-400"><i class="fa-solid fa-calendar-day mr-1"></i>${d.tglsurat || '-'}</div>
+                            </td>
+                            <td class="py-3 px-4 text-slate-600 whitespace-normal min-w-[200px] text-xs leading-relaxed">${d.perihal}</td>
+                            <td class="py-3 px-4">
+                                <div class="text-xs text-slate-700 font-medium mb-1"><i class="fa-solid fa-tag text-slate-400 mr-1 text-[10px]"></i>${d.karakteristik || '-'}</div>
+                                <div class="text-xs text-slate-700"><i class="fa-solid fa-layer-group text-slate-400 mr-1 text-[10px]"></i>${d.jenis || '-'}</div>
+                            </td>
+                            <td class="py-3 px-4 text-center">${badge}</td>
+                            <td class="py-3 px-4 text-center">
+                                <div class="flex gap-1 justify-center">
+                                    <button onclick="openFormModal('${d.id}')" class="w-7 h-7 rounded bg-blue-50 text-brand-blue hover:bg-brand-blue hover:text-white transition flex items-center justify-center" title="Edit"><i class="fa-solid fa-pen text-[10px]"></i></button>
+                                    <button onclick="deleteData('${d.id}')" class="w-7 h-7 rounded bg-rose-50 text-rose-600 hover:bg-rose-500 hover:text-white transition flex items-center justify-center" title="Hapus"><i class="fa-solid fa-trash text-[10px]"></i></button>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+        }
+
+        // CRUD OPERATIONS
+        window.openFormModal = (id = null) => {
+            const form = document.getElementById('crudForm');
+            form.reset();
+            document.getElementById('formId').value = '';
+            document.getElementById('modalFormTitle').innerText = 'Tambah Data SBML';
+
+            if(id) {
+                const d = globalData.find(x => x.id === id);
+                if(d) {
+                    document.getElementById('modalFormTitle').innerText = 'Edit Data SBML';
+                    document.getElementById('formId').value = d.id;
+                    document.getElementById('f_nama').value = d.nama || '';
+                    document.getElementById('f_tahun').value = d.tahun || '';
+                    document.getElementById('f_perihal').value = d.perihal || '';
+                    document.getElementById('f_nosurat').value = d.nosurat || '';
+                    document.getElementById('f_tglsurat').value = d.tglsurat || '';
+                    document.getElementById('f_kar').value = d.karakteristik || '1 K/L';
+                    document.getElementById('f_jenis').value = d.jenis || '1. SBML Baru';
+                    document.getElementById('f_status').value = d.status || 'Dalam Proses';
+                }
+            }
+            document.getElementById('modalForm').classList.remove('hidden');
+        };
+
+        window.closeFormModal = () => document.getElementById('modalForm').classList.add('hidden');
+
+        window.saveData = async () => {
+            const form = document.getElementById('crudForm');
+            if(!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+
+            const btn = document.getElementById('btnSaveData');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...';
+            btn.disabled = true;
+
+            const id = document.getElementById('formId').value || 'DOC_' + Date.now();
+            const data = {
+                nama: document.getElementById('f_nama').value,
+                tahun: document.getElementById('f_tahun').value,
+                perihal: document.getElementById('f_perihal').value,
+                nosurat: document.getElementById('f_nosurat').value,
+                tglsurat: document.getElementById('f_tglsurat').value,
+                karakteristik: document.getElementById('f_kar').value,
+                jenis: document.getElementById('f_jenis').value,
+                status: document.getElementById('f_status').value,
+                timestamp: Date.now()
+            };
+
+            try {
+                if(isOnline) {
+                    await setDoc(doc(db, "sbml_data", id), data);
+                } else {
+                    // Offline fallback
+                    data.id = id;
+                    const idx = globalData.findIndex(x => x.id === id);
+                    if(idx > -1) globalData[idx] = data; else globalData.unshift(data);
+                    refreshUI();
+                }
+                closeFormModal();
+                showToast("Sukses", "Data berhasil disimpan.");
+            } catch(e) {
+                console.error(e);
+                showToast("Gagal", "Terjadi kesalahan saat menyimpan data.", "error");
+            } finally {
+                btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> Simpan ke Cloud';
+                btn.disabled = false;
+            }
+        };
+
+        window.deleteData = (id) => {
+            window.openConfirm(async () => {
+                try {
+                    if(isOnline) {
+                        await deleteDoc(doc(db, "sbml_data", id));
+                    } else {
+                        globalData = globalData.filter(x => x.id !== id);
+                        refreshUI();
+                    }
+                    showToast("Terhapus", "Data telah dihapus dari sistem.");
+                } catch(e) {
+                    showToast("Gagal", "Tidak dapat menghapus data.", "error");
+                }
+            });
+        };
+
+        // IMPORT LOGIC
+        window.openImportModal = () => document.getElementById('modalImport').classList.remove('hidden');
+        window.closeImportModal = () => {
+            document.getElementById('modalImport').classList.add('hidden');
+            document.getElementById('fileUpload').value = '';
+        };
+
+        window.handleFileUpload = (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+
+            const status = document.getElementById('importStatus');
+            status.classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    const workbook = XLSX.read(new Uint8Array(evt.target.result), { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+
+                    let count = 0;
+                    for(const row of json) {
+                        const id = 'DOC_' + Date.now() + Math.random().toString(36).substr(2, 5);
+                        const item = {
+                            nama: row.nama || row.Nama || 'K/L Tidak Diketahui',
+                            tahun: row.tahun || row.Tahun || '2026',
+                            perihal: row.perihal || row.Perihal || '-',
+                            nosurat: row.nosurat || row['No Surat'] || '-',
+                            tglsurat: row.tglsurat || row['Tgl Surat'] || '-',
+                            karakteristik: row.karakteristik || row.Karakteristik || '1 K/L',
+                            jenis: row.jenis || row.Jenis || '1. SBML Baru',
+                            status: row.status || row.Status || 'Dalam Proses',
+                            timestamp: Date.now()
+                        };
+
+                        if(isOnline) {
+                            await setDoc(doc(db, "sbml_data", id), item);
+                        } else {
+                            item.id = id;
+                            globalData.unshift(item);
+                        }
+                        count++;
+                    }
+                    
+                    if(!isOnline) refreshUI();
+                    closeImportModal();
+                    showToast("Import Berhasil", `${count} baris data disinkronkan ke Cloud.`);
+                } catch(err) {
+                    console.error(err);
+                    showToast("Import Gagal", "Pastikan format file Excel/CSV sesuai.", "error");
+                } finally {
+                    status.classList.add('hidden');
+                    e.target.value = '';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        };
+
+        // Start App
+        initApp();
+    </script>
+</body>
+</html>
